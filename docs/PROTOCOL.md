@@ -97,7 +97,8 @@ Seiten-Befehle (258/259), der seitenweise Listenabruf und das Längenmodell aus 
 ### So wird Phase 0 abgeschlossen
 
 1. **Mitschnitt** erzeugen: App-Log + pcap mit einem Foto- und Video-Download
-   und 10 s Live-Ansicht. Ablage in `captures/` (gitignored).
+   und 10 s Live-Ansicht. Ablage in `captures/` (gitignored). Schritt-für-Schritt
+   (Mac direkt bzw. iPhone über rvi): siehe [`CAPTURE.md`](CAPTURE.md).
 2. **Schlüssel suchen**: Android-App mit `jadx`/`Ghidra` (Suchbegriffe
    `EC_Login`, `AES`, `PPCS_Initialize`), alternativ Frida-Hook auf
    `AES_set_encrypt_key`/`CCCrypt`. Ergebnis → `.env` `CAM_AES_KEY`, **nie ins Repo**.

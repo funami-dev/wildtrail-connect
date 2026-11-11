@@ -106,7 +106,7 @@ Werkzeuge (`tools/pcap_extract.py`, `tools/try_decrypt.py`) sind in
 [`docs/PROTOCOL.md`](docs/PROTOCOL.md) beschrieben. Kurz:
 
 1. Neues App-Log mit einem Foto- und Video-Download und 10 s Live-Ansicht.
-2. Netzwerkmitschnitt (`captures/`, gitignored).
+2. Netzwerkmitschnitt (`captures/`, gitignored) — Anleitung in [`docs/CAPTURE.md`](docs/CAPTURE.md).
 3. AES-Schlüssel aus der Android-App ermitteln → in `.env`, **nie ins Repo**.
 4. `try_decrypt.py` bestätigt Schlüssel/Modus; `docs/PROTOCOL.md` wird gefüllt.
 
