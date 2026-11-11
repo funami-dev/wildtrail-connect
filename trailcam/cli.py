@@ -127,27 +127,51 @@ def _progress_factory() -> tuple[Callable[[MediaItem], ProgressCb], Callable[[],
     return rich_factory, progress.stop
 
 
+def _confirm_delete(count: int, assume_yes: bool) -> bool:
+    if assume_yes:
+        return True
+    if not sys.stdin.isatty():
+        print(
+            "--delete-after braucht eine Bestätigung. Mit --yes bestätigen "
+            "oder interaktiv ausführen.",
+            file=sys.stderr,
+        )
+        return False
+    answer = input(f"{count} Dateien nach dem Laden auf der Kamera LÖSCHEN? [j/N] ")
+    return answer.strip().lower() in ("j", "ja", "y", "yes")
+
+
 async def cmd_download(settings: Settings, args: argparse.Namespace) -> int:
-    if args.delete_after:
-        print("--delete-after wird noch nicht unterstützt (Lösch-Befehl unbekannt).")
-        return 2
     out = Path(args.out) if args.out else settings.download_dir
+    delete_after = False
     async with Client(settings) as client:
         await _device_info(client)
         items = await list_media(client)
         selected = filter_items(items, args.type, args.since)
         log.info("%d Dateien auf der Karte, %d ausgewählt", len(items), len(selected))
+        if args.delete_after and not args.dry_run and selected:
+            delete_after = _confirm_delete(len(selected), args.yes)
+            if not delete_after:
+                print("Löschen abgebrochen, lade trotzdem herunter.", file=sys.stderr)
         factory, stop = _progress_factory()
         try:
             res = await download_all(
-                client, selected, out, dry_run=args.dry_run, progress_factory=factory
+                client,
+                selected,
+                out,
+                dry_run=args.dry_run,
+                delete_after=delete_after,
+                progress_factory=factory,
             )
         finally:
             stop()
     verb = "würden geladen" if args.dry_run else "neu"
-    print(
+    summary = (
         f"{len(res.new)} {verb}, {len(res.skipped)} übersprungen, {len(res.failed)} fehlgeschlagen"
     )
+    if res.deleted:
+        summary += f", {len(res.deleted)} gelöscht"
+    print(summary)
     for name, err in res.failed.items():
         print(f"  FEHLER {name}: {err}", file=sys.stderr)
     return 1 if res.failed else 0
@@ -183,7 +207,12 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--type", choices=("photo", "video", "all"), default="all")
     d.add_argument("--dry-run", action="store_true")
     d.add_argument("--no-thumbs", action="store_true", help="(Thumbnails werden nie geladen)")
-    d.add_argument("--delete-after", action="store_true", help="noch nicht unterstützt")
+    d.add_argument(
+        "--delete-after",
+        action="store_true",
+        help="nach gesichertem Download auf der Kamera löschen (cmdId 773)",
+    )
+    d.add_argument("--yes", "-y", action="store_true", help="Lösch-Rückfrage überspringen")
 
     lv = sub.add_parser("live", help="Livebild (Phase 2, noch nicht verfügbar)")
     lv.add_argument("--out", default="-")

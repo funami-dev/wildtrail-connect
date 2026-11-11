@@ -74,10 +74,10 @@ class FakeCamera(Session):
         n = 0
         for i in range(photos):
             n += 1
-            self.media.append(self._entry(2, n, BASE_TIME + i * 3600, 0))
+            self.media.append(self._entry(1, n, BASE_TIME + i * 3600, 0))
         for i in range(videos):
             n += 1
-            self.media.append(self._entry(1, n, BASE_TIME + (photos + i) * 3600, 10_000))
+            self.media.append(self._entry(2, n, BASE_TIME + (photos + i) * 3600, 10_000))
         self._worker: asyncio.Task[None] | None = None
         self._bg_started = False
 
@@ -202,16 +202,39 @@ class FakeCamera(Session):
             page = int(req["pageNo"])
             files = self.media[page * per : (page + 1) * per]
             await self._reply(hdr, {"mediaFiles": files, "cnt": len(files), "pageNo": page})
-        elif cmd in (Cmd.UNKNOWN_258, Cmd.UNKNOWN_259):
+        elif cmd in (Cmd.ENTER_PAGE, Cmd.LEAVE_PAGE, Cmd.SET_CONFIG):
             await self._reply(hdr, {"result": 0})
-        elif cmd == Cmd.DOWNLOAD:
+        elif cmd == Cmd.DOWNLOAD:  # == PLAYBACK_START (769)
+            num = int(req["mediaNum"])
+            if not any(m["mediaNum"] == num for m in self.media):
+                await self._reply(hdr, {"result": -4})
+                return
             if self.fail_downloads > 0:
                 self.fail_downloads -= 1
                 await self._reply(hdr, {"result": -3})
                 return
-            data = self.file_bytes(int(req["mediaNum"]))
-            await self._reply(hdr, {"result": 0, "fileSize": len(data)})
+            data = self.file_bytes(num)
+            # Echte Antwort trägt startPbRet/videoWidth/.../totalFrame/totalTime; der
+            # eigentliche Frame-Stream (AV-Kanal) ist noch Phase 0. fileSize ist das
+            # vorläufige Längenfeld dieses Emulators (siehe docs/PROTOCOL.md).
+            await self._reply(
+                hdr,
+                {
+                    "result": 0,
+                    "startPbRet": 0,
+                    "videoWidth": 1280,
+                    "videoHeight": 720,
+                    "totalFrame": 1,
+                    "totalTime": 10000,
+                    "fileSize": len(data),
+                },
+            )
             await self.write(CH_FILE, data)
+        elif cmd == Cmd.DELETE:
+            num = int(req["mediaNum"])
+            before = len(self.media)
+            self.media = [m for m in self.media if m["mediaNum"] != num]
+            await self._reply(hdr, {"delRet": 0, "result": 0 if len(self.media) < before else -5})
         else:
             await self._reply(hdr, {"result": -100})
 

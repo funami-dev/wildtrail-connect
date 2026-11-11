@@ -106,6 +106,25 @@ async def test_download_retries_then_recovers(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_download_with_delete_after(tmp_path):
+    cam, port = await start_fake_camera(photos=3, videos=1)
+    try:
+        async with await _client(port) as client:
+            items = await list_media(client)
+            res = await download_all(client, items, tmp_path, delete_after=True)
+        assert len(res.new) == 4
+        assert len(res.deleted) == 4
+        # Kamera ist nun leer
+        async with await _client(port) as client:
+            remaining = await list_media(client)
+        assert remaining == []
+        # Lokale Dateien sind noch da
+        assert len(list(tmp_path.glob("2025*"))) == 4
+    finally:
+        cam._abort()
+
+
+@pytest.mark.asyncio
 async def test_dry_run_writes_nothing(tmp_path):
     cam, port = await start_fake_camera(photos=3, videos=0)
     try:

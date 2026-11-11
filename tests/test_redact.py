@@ -11,7 +11,7 @@ def test_redacts_uid():
 
 
 def test_redacts_mac():
-    assert "F4:C1:56:AA:BB:CC" not in redact_line("mac F4:C1:56:AA:BB:CC")
+    assert "AA:BB:CC:DD:EE:FF" not in redact_line("mac AA:BB:CC:DD:EE:FF")
 
 
 def test_redacts_json_password():

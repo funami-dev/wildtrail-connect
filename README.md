@@ -9,10 +9,12 @@ Offener Kommandozeilen-Client für die **Wi-Fi-TrailCam** (Ingenic T31, EasyCam-
 
 > **Status:** Die Transportschicht (PPPP/UDP), das Befehls-Framing, Krypto, die
 > Download-Logik und ein vollständiger Emulator stehen und sind getestet.
-> Was noch fehlt, hängt an **Phase 0** (Protokoll-Discovery mit echter Kamera):
-> der **AES-Schlüssel/-Modus**, das **echte Frame-Header-Layout**, die
-> **Download-cmdId** und das **Stream-Format**. Diese Stellen sind im Code mit
-> `TODO(Phase 0)` markiert und an genau einem Ort gekapselt.
+> Aus den App-Logs sind inzwischen die cmdIds bekannt (Download = Playback-Start
+> `769`, Löschen `773`, Settings `513`, Seiten `258/259`) und das Längenmodell ist
+> an echten Werten bestätigt. Was noch an **Phase 0** (Mitschnitt mit echter Kamera)
+> hängt: der **AES-Schlüssel/-Modus** (die Logs sind Klartext) und das **AV-Frame-
+> Layout** – darüber laufen sowohl der eigentliche Datei-Download als auch das
+> Livebild. Diese Stellen sind im Code mit `TODO(Phase 0)` markiert.
 
 ## Installation
 
@@ -51,6 +53,7 @@ trailcam info                       # Akku, SD-Belegung, Firmware, Anzahl Dateie
 trailcam download                   # alles laden, Bekanntes überspringen
 trailcam download --type photo --since 2026-01-01
 trailcam download --dry-run         # nur anzeigen, was geladen würde
+trailcam download --delete-after    # nach gesichertem Download auf der Kamera löschen (773)
 trailcam live                       # Phase 2 (noch nicht verfügbar)
 ```
 

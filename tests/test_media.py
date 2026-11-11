@@ -3,7 +3,7 @@ import datetime as dt
 from trailcam.media import Manifest, MediaItem, already_downloaded, filter_items
 
 PHOTO = {
-    "fileType": 2,
+    "fileType": 1,
     "mediaDirNum": 100,
     "mediaNum": 3,
     "durationMs": 0,
@@ -11,7 +11,7 @@ PHOTO = {
     "mediaTime": 1762000000,
 }
 VIDEO = {
-    "fileType": 1,
+    "fileType": 2,
     "mediaDirNum": 100,
     "mediaNum": 9,
     "durationMs": 10000,

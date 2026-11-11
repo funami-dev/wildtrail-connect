@@ -97,6 +97,21 @@ async def list_media(client: Client, page_size: int = PAGE_SIZE) -> list[MediaIt
     return items
 
 
+async def delete_media(client: Client, item: MediaItem) -> None:
+    """Löscht eine Datei auf der SD-Karte (cmdId 773).
+
+    Request: ``{"cmdId":773,"fileType","dirNum","mediaNum"}``;
+    Antwort: ``{"delRet":0,"result":0}``. ``result != 0`` löst ``CameraError`` aus.
+    """
+    await client.send_cmd(
+        Cmd.DELETE,
+        fileType=item.file_type,
+        dirNum=item.dir_num,
+        mediaNum=item.media_num,
+    )
+    log.info("Gelöscht: %s", item.filename)
+
+
 # --- Manifest -------------------------------------------------------------------
 
 
@@ -173,6 +188,7 @@ class DownloadResult:
     new: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     failed: dict[str, str] = field(default_factory=dict)
+    deleted: list[str] = field(default_factory=list)
 
 
 async def download_one(
@@ -205,6 +221,7 @@ async def download_all(
     directory: Path,
     *,
     dry_run: bool = False,
+    delete_after: bool = False,
     progress_factory: Callable[[MediaItem], ProgressCb] | None = None,
 ) -> DownloadResult:
     directory.mkdir(parents=True, exist_ok=True)
@@ -213,30 +230,42 @@ async def download_all(
     try:
         for item in items:
             target = directory / item.filename
-            if already_downloaded(target, manifest):
+            on_disk = already_downloaded(target, manifest)
+            if on_disk:
                 result.skipped.append(item.filename)
-                continue
-            if dry_run:
+            elif dry_run:
                 log.info("[dry-run] würde laden: %s", item.filename)
                 result.new.append(item.filename)
                 continue
-            last_err = ""
-            for attempt in range(DOWNLOAD_RETRIES + 1):
-                cb = progress_factory(item) if progress_factory else (lambda d, t: None)
-                try:
-                    path, sha = await download_one(client, item, directory, cb)
-                except (CameraError, TimeoutError, OSError, KeyError, ValueError) as e:
-                    last_err = f"{type(e).__name__}: {e}"
-                    log.warning("%s: Versuch %d fehlgeschlagen: %s", item.filename, attempt + 1, e)
-                    with contextlib.suppress(OSError):
-                        (directory / (item.filename + ".part")).unlink()
-                    continue
-                manifest.add(item, path, sha)
-                manifest.save()
-                result.new.append(item.filename)
-                break
             else:
-                result.failed[item.filename] = last_err
+                last_err = ""
+                for attempt in range(DOWNLOAD_RETRIES + 1):
+                    cb = progress_factory(item) if progress_factory else (lambda d, t: None)
+                    try:
+                        path, sha = await download_one(client, item, directory, cb)
+                    except (CameraError, TimeoutError, OSError, KeyError, ValueError) as e:
+                        last_err = f"{type(e).__name__}: {e}"
+                        log.warning(
+                            "%s: Versuch %d fehlgeschlagen: %s", item.filename, attempt + 1, e
+                        )
+                        with contextlib.suppress(OSError):
+                            (directory / (item.filename + ".part")).unlink()
+                        continue
+                    manifest.add(item, path, sha)
+                    manifest.save()
+                    result.new.append(item.filename)
+                    break
+                else:
+                    result.failed[item.filename] = last_err
+                    continue  # Löschen nur bei gesichertem Download
+
+            # Löschen erst nach gesichertem lokalen Vorhandensein (frisch oder schon da).
+            if delete_after:
+                try:
+                    await delete_media(client, item)
+                    result.deleted.append(item.filename)
+                except (CameraError, TimeoutError, ValueError) as e:
+                    log.warning("Konnte %s nicht löschen: %s", item.filename, e)
     finally:
         if not dry_run:
             manifest.save()

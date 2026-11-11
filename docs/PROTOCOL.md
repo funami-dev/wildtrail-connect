@@ -44,19 +44,35 @@ In `tests/test_length_model.py` als Regressionstest hinterlegt
 
 ## Befehle (cmdId)
 
-| cmdId | Zweck | Status |
-|---|---|---|
-| 0 | Login | bekannt |
-| 1 | Logout | **vermutet** (Wert unbestätigt) |
-| 258 / 259 | Seite betreten/verlassen? Stream-Steuerung? | offen |
-| 512 | Geräteinfo/Settings | bekannt |
-| 525 | Heartbeat | bekannt |
-| 768 | Medienliste (seitenweise, 48/Seite) | bekannt |
-| 772 | Thumbnails (separater Kanal) | bekannt |
-| Datei-Download | **unbekannt** | **Phase 0** |
-| Livestream start/stop | unbekannt (evtl. Login `needVideo:1`) | **Phase 0** |
+Aktualisiert anhand des Download-/Lösch-Logs (App 2.11.21).
 
-`fileType 2` = Foto (`durationMs 0`). Videos: vermutlich anderer Typ mit `durationMs > 0`.
+| cmdId | Zweck | Request (Auszug) | Response (Auszug) | Status |
+|---|---|---|---|---|
+| 0 | Login | `usrName,password,needVideo,needAudio,utcTime,supportHeartBeat` | `result,errorCode,token` | bekannt |
+| 1 | Logout | kein JSON im Log | – | vermutet |
+| 258 | Seite betreten | `token,seq` | `result:0` | bekannt |
+| 259 | Seite verlassen | `token,seq` | `result:0` | bekannt |
+| 512 | Geräteinfo/Settings | `token,seq` | großes JSON (`batPercent,sdTotalMB,…`) | bekannt |
+| 513 | Einstellung setzen | z. B. `shootMode:0` | `result:0` | bekannt |
+| 525 | Heartbeat | `{"cmdId":525}` (ohne Token) | keine | bekannt |
+| 768 | Medienliste | `itemCntPerPage:48,pageNo` | `mediaFiles[],cnt,pageNo` | bekannt |
+| **769** | **Download = Playback-Start** | `fileType,dirNum,mediaNum` | `startPbRet,videoWidth,videoHeight,totalFrame,totalTime` | **bekannt; AV-Frames offen** |
+| 772 | Thumbnails | `thumbnailReqs[]` | `cmdRet:0` (Daten auf Thumb-Kanal) | bekannt |
+| **773** | **Datei löschen** | `fileType,dirNum,mediaNum` | `delRet:0,result:0` | bekannt |
+
+### Download ist ein Playback-Stream
+
+Es gibt **keinen** rohen Dateitransfer. Der Client sendet `cmdId 769` („Start play
+cmd"); die Antwort nennt Auflösung, `totalFrame` und `totalTime`. Danach kommen die
+Frames über den **AV-Kanal**, und die App remuxt sie zu einer MP4. Das erklärt, warum
+die gespeicherte Dateigröße von der Rohgröße auf der Karte abweicht.
+
+- Das **AV-Frame-Layout** (Codec-/Keyframe-/Längen-Header) ist im Textlog nicht
+  enthalten und bleibt der Phase-0-Blocker für den echten Download **und** fürs
+  Livebild (beide nutzen vermutlich denselben AV-Kanal).
+- `fileType 2` wurde im Log als **MP4-Video** (H.264, 1280×720, ~10 s) geladen,
+  obwohl `durationMs` in der Liste 0 war. `durationMs` ist also unzuverlässig; ein
+  Foto-Beispiel (vermutlich `fileType 1`, JPEG) fehlt noch.
 
 ## Kanäle
 
@@ -68,11 +84,15 @@ Konstanten in `trailcam/proto/commands.py` sind vorläufig.
 
 | # | Thema | Blockiert |
 |---|---|---|
-| 1 | AES-Schlüssel + Modus (ECB/CBC, IV) | alles |
+| 1 | AES-Schlüssel + Modus (ECB/CBC, IV) | alles (Log ist Klartext, pcap nötig) |
 | 2 | echtes Frame-Header-Layout (21/41 Byte) | Feldzuordnung |
-| 3 | Download-cmdId + Datei-Stream-Format | Phase 1 (echte HW) |
-| 4 | Stream-Start-cmdId + Frame-Header | Phase 2 |
+| 3 | AV-Frame-Layout (Codec/Keyframe/Länge) | Download (769) **und** Livebild |
+| 4 | PPPP-Kanalnummern (cmd/event/AV/thumb/OTA) | Reassembly |
 | 5 | Zusätzliche PPPP-Verschleierung? | evtl. Transport |
+
+Durch die Logs inzwischen **geklärt**: Download-/Lösch-/Settings-cmdIds (769/773/513),
+Seiten-Befehle (258/259), der seitenweise Listenabruf und das Längenmodell aus §3.4
+(bestätigt an Login-Response 77→149 Byte, Heartbeat 13→45 Byte, Login-Request →193 Byte).
 
 ### So wird Phase 0 abgeschlossen
 
